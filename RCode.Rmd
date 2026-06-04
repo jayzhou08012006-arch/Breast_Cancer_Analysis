@@ -1,0 +1,123 @@
+---
+title: "MA5810-Assessment 2"
+output: pdf_document
+date: "2023-08-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1
+
+#### Part A: Exploratory Data Analysis
+
+```{r}
+# Load required packages
+library(dplyr)
+library(caTools)
+library(MASS)
+
+# Step 1: Import the data into your session
+data_name <- "wdbc.data"
+data <- read.csv(data_name, header = FALSE)
+head(data)
+
+# Assign column names to the data
+col_names <- c("ID", "Diagnosis", paste0("Feature_", 1:30))
+colnames(data) <- col_names
+
+# Convert Diagnosis to a binary variable (1 for malignant, 0 for benign)
+data$Diagnosis <- as.factor(ifelse(data$Diagnosis == "M", 1, 0))
+head(data)
+```
+
+#### Part B: Investigate the correlation between the numeric features
+
+```{r}
+library(corrplot)
+# Task 3: Investigate the correlation between the 30 numeric features
+correlation_matrix <- cor(data[, 3:32])
+corrplot(correlation_matrix)
+```
+
+Inference: There are some highly correlated features in the dataset. Therefore, multicollinearity exists.
+
+#### Part C: Derive secondary feature set using PCA analysis
+
+```{r}
+library(caret)
+library("factoextra")
+
+# Subset the numeric features only (excluding ID and Diagnosis columns)
+numeric_features <- data[, -c(1, 2)]
+pca_eval <- prcomp(numeric_features, scale = TRUE)
+summary(pca_eval)
+ 
+# Std. Dev of PCA analysis
+pca_eval$sdev
+ 
+# Variance is sdev^2
+pca_eval.var <- pca_eval$sdev ^ 2
+ 
+# For Scree plot, find proportion of var
+varprop <- pca_eval.var / sum(pca_eval.var)
+
+# Scree plot for varprop
+plot(varprop, xlab = "Principle Component",
+            ylab = "Proportion of Variance",
+            ylim = c(0, 1), type = "b",
+            main = "Variance Proportion")
+
+# Screr plot of cumulative proportion
+plot(cumsum(varprop),
+    xlab = "Principle Component",
+    ylab = "Cumulative Proportion",
+    ylim = c(0, 1), type = "b")
+ 
+which(cumsum(varprop) > 0.9)[1]
+```
+
+#### Part D: Form the transformed data
+
+```{r}
+# Get the first 6 principal components
+pca_components <- pca_eval$x[, 1:4]
+
+# Create a new data frame with the transformed data
+transformed_data <- as.data.frame(pca_components)
+
+# Add the ID and Diagnosis columns back to the transformed data
+transformed_data <- cbind(data[, c(1, 2)], transformed_data)
+
+head(transformed_data)
+
+```
+
+#### Part E: Fit a Logistic Regression Model on the Transformed data
+
+```{r}
+set.seed(42) # For reproducibility
+split_new <- sample.split(transformed_data, SplitRatio = 0.9)
+train_transformed_data <- subset(transformed_data, split_new == TRUE)
+test_transformed_data <- subset(transformed_data, split_new == FALSE)
+
+transformed_model <- glm(Diagnosis ~ ., data = train_transformed_data[, -1], family = binomial)
+summary(transformed_model)
+```
+
+#### Part F: Prediction and Accuracy of the the model
+
+```{r}
+
+# Predict the diagnoses on the test data using the logistic regression model
+logreg_preds <- predict(transformed_model, newdata = test_transformed_data[, -1], type = "response")
+
+# Convert the predicted probabilities to diagnoses
+logreg_preds  <- ifelse(logreg_preds > 0.5, 1, 0)
+
+# Compute the accuracy of the logistic regression model on the test data
+logreg_accuracy <- mean(logreg_preds == test_transformed_data$Diagnosis)
+# Print the accuracy of the logistic regression model
+cat("Transformed Model Logistic Regression Accuracy:", logreg_accuracy, "\n")
+```
